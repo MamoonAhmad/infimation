@@ -2,13 +2,13 @@ import { useReducer, useState } from "react";
 // import "./App.css";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader } from "./components/ui/dialog";
 import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import { Plus } from "lucide-react";
+import { LoaderCircle, Plus, Save } from "lucide-react";
 
 function App() {
 
@@ -20,6 +20,37 @@ function App() {
     }
   }, { nodes: [], edges: [] });
 
+  // Load workflow from API on mount
+  useEffect(() => {
+    const loadWorkflow = async () => {
+      try {
+        const res = await fetch("http://localhost:3002/workflow");
+        if (!res.ok) return; // No workflow found
+        const { flow, nodeMap } = await res.json();
+        if (!flow || !flow.nodes) return;
+        // Convert flow and nodeMap to nodes and edges for ReactFlow
+        const loadedNodes = flow.nodes.map((node, idx) => ({
+          id: node.id,
+          position: { x: 100, y: (idx + 1) * 100 },
+          data: {
+            label: nodeMap[node.id]?.name || node.id,
+            code: nodeMap[node.id]?.code || ""
+          }
+        }));
+        const loadedEdges = flow.nodes
+          .filter(node => node.next)
+          .map(node => ({
+            id: node.id + "-" + node.next.id,
+            source: node.id,
+            target: node.next.id
+          }));
+        setState({ nodes: loadedNodes, edges: loadedEdges });
+      } catch (e) {
+        // Ignore errors (e.g., no workflow file)
+      }
+    };
+    loadWorkflow();
+  }, []);
 
 
   const getNewNode = () => {
@@ -70,13 +101,62 @@ function App() {
   }
 
   const createWorkflow = () => {
-    const nodesMap = nodes.reduce((acc, node) => {
-      acc[node.id] = node;
+    // Build nodeMap
+    const nodeMap = nodes.reduce((acc, node) => {
+      acc[node.id] = {
+        name: node.data.label,
+        code: node.data.code,
+      };
       return acc;
-    }, []);
-    edges.forEach(edge => {
-      
+    }, {});
+
+    // Build a quick lookup for edges by source
+    const edgeMap = edges.reduce((acc, edge) => {
+      acc[edge.source] = edge.target;
+      return acc;
+    }, {});
+
+    // Build flow.nodes
+    const flowNodes = nodes.map(node => {
+      const nextId = edgeMap[node.id];
+      return {
+        id: node.id,
+        type: "node",
+        ...(nextId && {
+          next: {
+            id: nextId,
+            type: "node"
+          }
+        })
+      };
+    });
+
+    const flow = {
+      type: "flow",
+      nodes: flowNodes
+    };
+
+    // Now you have both flow and nodeMap
+    console.log({ flow, nodeMap });
+    return { flow, nodeMap };
+  }
+
+  const saveWorkflow = async () => {
+    const workflow = createWorkflow();
+    setState({
+      savingWorkflow: true
     })
+    const res = await fetch("http://localhost:3002/workflow", {
+      method: "POST",
+      body: JSON.stringify(workflow),
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+    setState({
+      savingWorkflow: false
+    })
+    const resJson = await res.json();
   }
 
   return (
@@ -87,19 +167,37 @@ function App() {
           <Controls />
         </ReactFlow>
       </div>
-      <Button
-        className="absolute bottom-2 right-2 z-10"
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
+      <div className="flex gap-2 absolute bottom-2 right-2 z-10">
 
-          const node = getNewNode();
-          addNewNode(node);
-        }}
-      >
-        <Plus />
-        Add Node
-      </Button>
+
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
+            const node = getNewNode();
+            addNewNode(node);
+          }}
+        >
+          <Plus />
+          Add Node
+        </Button>
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
+            saveWorkflow();
+          }}
+        >
+          {
+            state.savingWorkflow ? <LoaderCircle className="animate-spin" /> : <Save />
+          }
+
+          Save Workflow
+        </Button>
+      </div>
+
       {
         <Dialog open={!!state.nodeToEdit} onOpenChange={(open) => {
           if (!open) {

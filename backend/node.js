@@ -67,4 +67,56 @@ const nodeMap = {
     }
 }
 
-runFlow(flow, nodeMap);
+const fastify = require('fastify')();
+const cors = require('@fastify/cors');
+const fs = require('fs');
+const path = require('path');
+
+// Register CORS
+fastify.register(cors, {});
+
+// Register JSON body parser (built-in)
+fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function (req, body, done) {
+  try {
+    const json = JSON.parse(body);
+    done(null, json);
+  } catch (err) {
+    err.statusCode = 400;
+    done(err, undefined);
+  }
+});
+
+const WORKFLOW_FILE = path.join(__dirname, 'workflow.json');
+
+// Endpoint to save workflow
+fastify.post('/workflow', async (request, reply) => {
+    const { flow, nodeMap } = request.body;
+    try {
+        fs.writeFileSync(WORKFLOW_FILE, JSON.stringify({ flow, nodeMap }, null, 2));
+        reply.send({ success: true });
+    } catch (e) {
+        reply.status(500).send({ success: false, error: e.message });
+    }
+});
+
+// Endpoint to get workflow
+fastify.get('/workflow', async (request, reply) => {
+    try {
+        if (!fs.existsSync(WORKFLOW_FILE)) {
+            return reply.status(404).send({ error: 'Workflow not found' });
+        }
+        const data = fs.readFileSync(WORKFLOW_FILE, 'utf-8');
+        reply.send(JSON.parse(data));
+    } catch (e) {
+        reply.status(500).send({ error: e.message });
+    }
+});
+
+// Start server
+fastify.listen({ port: 3002 }, (err, address) => {
+    if (err) {
+        console.error(err);
+        process.exit(1);
+    }
+    console.log(`Server listening at ${address}`);
+});
