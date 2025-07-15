@@ -3,38 +3,34 @@
     "type": "flow",
     "nodes": [
       {
+        "type": "node",
         "id": "1752602644455",
-        "type": "node",
         "next": {
+          "type": "node",
           "id": "1752603053763",
-          "type": "node"
+          "next": {
+            "type": "node",
+            "id": "1752604918866"
+          }
         }
-      },
-      {
-        "id": "1752603053763",
-        "type": "node",
-        "next": {
-          "id": "1752604918866",
-          "type": "node"
-        }
-      },
-      {
-        "id": "1752604918866",
-        "type": "node"
       }
     ]
   },
   "nodeMap": {
     "1752602644455": {
       "name": "Node 1",
-      "code": "console.log(\"Node 1\")"
+      "code": "console.log(\"Node 1\")\nreturn {something: 1}",
+      "id": "1752602644455"
     },
     "1752603053763": {
       "name": "Node 2",
-      "code": "console.log(\"Node 2\")"
+      "code": "console.log(\"Node 2\")",
+      "id": "1752603053763"
     },
     "1752604918866": {
-      "name": "1752604918866"
+      "name": "Node 3",
+      "code": "return {another: 1, something: 2}",
+      "id": "1752604918866"
     }
   }
 }

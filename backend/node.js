@@ -25,14 +25,14 @@ function runNodeInFlow(nodeConfig, nodeMap, outputContext) {
             outputContext[id] = {
                 output: res || null
             };
-            if (next) {
-                runNodeInFlow(next, nodeMap, outputContext)
-            }
         } catch (e) {
             outputContext[id] = {
                 error: e?.toString()
             };
             throw new Error(`Failed to run node ${node.name}.`);
+        }
+        if (next) {
+            runNodeInFlow(next, nodeMap, outputContext)
         }
     } else if (type === "flow") { }
     else {
@@ -43,6 +43,7 @@ function runNodeInFlow(nodeConfig, nodeMap, outputContext) {
 function runNode(node) {
 
     let nodeFunc;
+    const id = node.id;
     try {
         nodeFunc = new Function(node.code);
     } catch (e) {
@@ -155,10 +156,7 @@ fastify.post('/run-node', async (request, reply) => {
         }
         let output;
         try {
-            output = runNode({
-                id: nodeId,
-                type: "node"
-            }, nodeMap);
+            output = runNode(node);
         } catch (err) {
             return reply.status(500).send({ error: err.message });
         }
@@ -170,7 +168,7 @@ fastify.post('/run-node', async (request, reply) => {
 
 // Endpoint to run a node by id
 fastify.post('/run-workflow', async (request, reply) => {
-    
+
     try {
         if (!fs.existsSync(WORKFLOW_FILE)) {
             return reply.status(404).send({ error: 'Workflow not found' });

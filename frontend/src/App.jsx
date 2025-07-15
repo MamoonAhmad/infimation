@@ -10,6 +10,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { LoaderCircle, Play, Plus, Save } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { Dialog as Modal } from "./components/ui/dialog";
 
 function App() {
 
@@ -21,6 +22,11 @@ function App() {
     }
   }, { nodes: [], edges: [] });
 
+  // State for workflow run modal
+  const [workflowRun, setWorkflowRun] = useState(null);
+  const [workflowRunOpen, setWorkflowRunOpen] = useState(false);
+  const [selectedRunNode, setSelectedRunNode] = useState(null);
+
   // Load workflow from API on mount
   useEffect(() => {
     const loadWorkflow = async () => {
@@ -30,21 +36,32 @@ function App() {
         const { flow, nodeMap } = await res.json();
         if (!flow || !flow.nodes) return;
         // Convert flow and nodeMap to nodes and edges for ReactFlow
-        const loadedNodes = flow.nodes.map((node, idx) => ({
-          id: node.id,
-          position: { x: 100, y: (idx + 1) * 100 },
-          data: {
-            label: nodeMap[node.id]?.name || node.id,
-            code: nodeMap[node.id]?.code || ""
+        // Handle nested 'next' structure
+        const loadedNodes = [];
+        const loadedEdges = [];
+        const visited = new Set();
+        function traverse(node, idx) {
+          if (!node || visited.has(node.id)) return;
+          visited.add(node.id);
+          loadedNodes.push({
+            id: node.id,
+            position: { x: 100, y: (loadedNodes.length + 1) * 100 },
+            data: {
+              label: nodeMap[node.id]?.name || node.id,
+              code: nodeMap[node.id]?.code || ""
+            }
+          });
+          if (node.next && node.next.id) {
+            loadedEdges.push({
+              id: node.id + "-" + node.next.id,
+              source: node.id,
+              target: node.next.id
+            });
+            traverse(node.next, idx + 1);
           }
-        }));
-        const loadedEdges = flow.nodes
-          .filter(node => node.next)
-          .map(node => ({
-            id: node.id + "-" + node.next.id,
-            source: node.id,
-            target: node.next.id
-          }));
+        }
+        // There may be multiple roots in flow.nodes (array)
+        flow.nodes.forEach((node, idx) => traverse(node, idx));
         setState({ nodes: loadedNodes, edges: loadedEdges });
       } catch (e) {
         // Ignore errors (e.g., no workflow file)
@@ -107,6 +124,7 @@ function App() {
       acc[node.id] = {
         name: node.data.label,
         code: node.data.code,
+        id: node.id
       };
       return acc;
     }, {});
@@ -134,7 +152,6 @@ function App() {
       edgeMap[targetNodeID] = flowNode
     })
 
-    debugger
     const flow = {
       type: "flow",
       nodes: flowNodes
@@ -162,6 +179,28 @@ function App() {
     })
     const resJson = await res.json();
   }
+
+  // Handler for running the workflow
+  const runWorkflow = async () => {
+    setState({ runningWorkflow: true });
+    try {
+      const res = await fetch("http://localhost:3002/run-workflow", {
+        method: "POST",
+        body: JSON.stringify({}),
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      const resJSON = await res.json();
+      setWorkflowRun(resJSON);
+      setWorkflowRunOpen(true);
+    } catch (e) {
+      setWorkflowRun({ error: e.message });
+      setWorkflowRunOpen(true);
+    } finally {
+      setState({ runningWorkflow: false });
+    }
+  };
 
   return (
     <>
@@ -205,22 +244,12 @@ function App() {
             e.stopPropagation();
             e.preventDefault();
 
-            (async () => {
-              const res = fetch("http://localhost:3002/run-workflow", {
-                method: "POST",
-                body: JSON.stringify({}),
-                headers: {
-                  "Content-Type": "application/json"
-                }
-              });
-              const resJSON = await res.json()
-            })()
+            runWorkflow();
           }}
         >
           {
-            state.savingWorkflow ? <LoaderCircle className="animate-spin" /> : <Save />
+            state.runningWorkflow ? <LoaderCircle className="animate-spin" /> : <Play />
           }
-
           Run Workflow
         </Button>
       </div>
@@ -326,6 +355,58 @@ function App() {
           </DialogContent>
         </Dialog>
       }
+
+      {/* Workflow Run Modal */}
+      <Modal open={workflowRunOpen} onOpenChange={setWorkflowRunOpen}>
+        <DialogContent className="h-[80vh] min-w-[80vw] flex flex-col justify-start">
+          <DialogHeader>
+            <h2 className="text-xl font-bold">Workflow Run</h2>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 grow">
+            <ReactFlow
+              nodes={nodes.map(n => {
+                let style = {};
+                if (workflowRun?.nodeOutputs?.[n.id]?.error) {
+                  style = { border: '2px solid red', background: '#ffe5e5' };
+                } else if (workflowRun?.nodeOutputs?.[n.id]) {
+                  style = { border: '2px solid #4ade80', background: '#f0fdf4' };
+                }
+                return {
+                  ...n,
+                  style,
+                };
+              })}
+              edges={edges}
+              onNodeClick={(_, node) => setSelectedRunNode(node)}
+              fitView
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
+            {selectedRunNode && (
+              <div className="mt-4">
+                <h3 className="font-semibold mb-2">Node Output: {selectedRunNode.data.label}</h3>
+                {workflowRun?.nodeOutputs?.[selectedRunNode.id] === undefined ? (
+                  <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">Node did not run.</pre>
+                ) : workflowRun?.nodeOutputs?.[selectedRunNode.id]?.error ? (
+                  <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">{JSON.stringify(workflowRun.nodeOutputs[selectedRunNode.id].error, null, 2)}</pre>
+                ) : (
+                  <pre className="bg-gray-100 text-gray-800 p-2 rounded text-xs whitespace-pre-wrap">
+                    {workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output === undefined || workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output === null
+                      ? "Node did not return any output."
+                      : JSON.stringify(workflowRun.nodeOutputs[selectedRunNode.id].output, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
+            {workflowRun?.error && (
+              <div className="mt-4">
+                <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">{JSON.stringify(workflowRun.error, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Modal>
     </>
   );
 }
