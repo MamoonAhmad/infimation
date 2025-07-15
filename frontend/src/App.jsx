@@ -8,7 +8,8 @@ import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import { LoaderCircle, Plus, Save } from "lucide-react";
+import { LoaderCircle, Play, Plus, Save } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 
 function App() {
 
@@ -110,27 +111,30 @@ function App() {
       return acc;
     }, {});
 
-    // Build a quick lookup for edges by source
-    const edgeMap = edges.reduce((acc, edge) => {
-      acc[edge.source] = edge.target;
-      return acc;
-    }, {});
+    const edgeMap = {};
+    const flowNodes = []
+    edges.forEach(edge => {
+      const sourceNodeID = edge.source;
+      const targetNodeID = edge.target
 
-    // Build flow.nodes
-    const flowNodes = nodes.map(node => {
-      const nextId = edgeMap[node.id];
-      return {
-        id: node.id,
+
+      if (!edgeMap[sourceNodeID]) {
+        const flowNode = {
+          type: "node",
+          id: sourceNodeID
+        }
+        edgeMap[sourceNodeID] = flowNode
+        flowNodes.push(flowNode);
+      }
+      const flowNode = {
         type: "node",
-        ...(nextId && {
-          next: {
-            id: nextId,
-            type: "node"
-          }
-        })
-      };
-    });
+        id: targetNodeID
+      }
+      edgeMap[sourceNodeID].next = flowNode
+      edgeMap[targetNodeID] = flowNode
+    })
 
+    debugger
     const flow = {
       type: "flow",
       nodes: flowNodes
@@ -196,6 +200,29 @@ function App() {
 
           Save Workflow
         </Button>
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
+            (async () => {
+              const res = fetch("http://localhost:3002/run-workflow", {
+                method: "POST",
+                body: JSON.stringify({}),
+                headers: {
+                  "Content-Type": "application/json"
+                }
+              });
+              const resJSON = await res.json()
+            })()
+          }}
+        >
+          {
+            state.savingWorkflow ? <LoaderCircle className="animate-spin" /> : <Save />
+          }
+
+          Run Workflow
+        </Button>
       </div>
 
       {
@@ -203,46 +230,99 @@ function App() {
           if (!open) {
             setState({
               nodeToEdit: null,
-              nodeToEditCode: null
+              nodeToEditCode: null,
+              runningNode: undefined,
+              runNodeError: undefined,
+              runNodeOutput: undefined
             })
           }
         }}>
 
 
 
-          <DialogContent>
+          <DialogContent className={"h-[80vh] min-w-[80vw] flex flex-col justfy-start"}>
             <DialogHeader>
               {state?.nodeToEdit?.data?.label}
             </DialogHeader>
-            <Label>
-              Node Name
-            </Label>
-            <Input
-              value={state.nodeToEditName || ""}
-              onChange={e => {
-                setState({
-                  nodeToEditName: e.target.value
-                })
-                state.nodeToEdit.data.label = e.target.value
-              }}
-            />
-            <Label>Code To Execute</Label>
-            <Textarea
-              value={state.nodeToEditCode || ""}
-              onChange={e => {
-                setState({
-                  nodeToEditCode: e.target.value
-                });
-                state.nodeToEdit.data.code = e.target.value
-              }}
-            />
-            <DialogFooter>
-              <Button onClick={() => {
-                setState({
-                  nodeToEdit: undefined
-                })
-              }}>Save</Button>
-            </DialogFooter>
+            <Tabs className={"grow"}>
+              <TabsList defaultValue="info" className={"w-full"}>
+                <TabsTrigger value="info">Info</TabsTrigger>
+                <TabsTrigger value="run">Run</TabsTrigger>
+              </TabsList>
+              <TabsContent value="info" className={"gap-2 flex flex-col pt-5"}>
+                <Label>
+                  Node Name
+                </Label>
+                <Input
+                  value={state.nodeToEditName || ""}
+                  onChange={e => {
+                    setState({
+                      nodeToEditName: e.target.value
+                    })
+                    state.nodeToEdit.data.label = e.target.value
+                  }}
+                />
+                <Label>Code To Execute</Label>
+                <Textarea
+                  value={state.nodeToEditCode || ""}
+                  onChange={e => {
+                    setState({
+                      nodeToEditCode: e.target.value
+                    });
+                    state.nodeToEdit.data.code = e.target.value
+                  }}
+                  className={"grow"}
+                />
+                <DialogFooter >
+                  <Button onClick={() => {
+                    setState({
+                      nodeToEdit: undefined
+                    })
+                  }}>Save</Button>
+                </DialogFooter>
+              </TabsContent>
+              <TabsContent value="run" className={"gap-2 flex flex-col pt-5"}>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    disabled={state.runningNode}
+                    onClick={async () => {
+                      setState({ runningNode: true, runNodeOutput: undefined, runNodeError: undefined });
+                      try {
+                        const res = await fetch("http://localhost:3002/run-node", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ nodeId: state.nodeToEdit.id })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                          setState({ runNodeError: data.error, runningNode: false });
+                        } else {
+                          setState({ runNodeOutput: data.output, runningNode: false });
+                        }
+                      } catch (e) {
+                        setState({ runNodeError: e.message, runningNode: false });
+                      }
+                    }}
+                    className={"self-start"}
+                  >
+                    {state.runningNode ? <LoaderCircle className="animate-spin" /> : <Play />} Run Node
+                  </Button>
+                  {
+                    state?.runningNode || state.runningNode === undefined ? null : <div className="mt-2 flex flex-col gap-3">
+                      <Label>Node Output</Label>
+                      {state.runNodeError ? (
+                        <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">{JSON.stringify(state.runNodeError, null, 2)}</pre>
+                      ) : state.runNodeOutput === undefined ? (
+
+                        <pre className="bg-gray-100 text-gray-800 p-2 rounded text-xs">Node did not return any output.</pre>
+
+                      ) : <pre className="bg-gray-100 text-gray-800 p-2 rounded text-xs whitespace-pre-wrap">{JSON.stringify(state.runNodeOutput, null, 2)}</pre>}
+
+                    </div>
+                  }
+                </div>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
       }
