@@ -7,9 +7,9 @@ function runFlow(flowConfig, nodeMap) {
     })
 }
 
-function runNode (nodeConfig, nodeMap) {
-    const {id, type, next} = nodeConfig;
-    if(type === "node") {
+function runNode(nodeConfig, nodeMap) {
+    const { id, type, next } = nodeConfig;
+    if (type === "node") {
         const node = nodeMap[id];
         let nodeFunc;
         try {
@@ -17,21 +17,21 @@ function runNode (nodeConfig, nodeMap) {
         } catch (e) {
             throw new Error(
                 `Error creating the node function ${node.name || ""} (${id}): ${e}`
-            );    
+            );
         }
-        
+
         try {
             nodeFunc();
         } catch (e) {
             throw new Error(
                 `Error executing the node ${node.name || ""} (${id}): ${e}`
-            );    
+            );
         }
 
-        if(next) {
+        if (next) {
             runNode(next, nodeMap)
         }
-    } else if(type === "flow") {}
+    } else if (type === "flow") { }
     else {
         throw new Error("Invalid node type received while running the flow.");
     }
