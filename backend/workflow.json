@@ -40,7 +40,7 @@
     },
     "1752603053763": {
       "name": "Node 2",
-      "code": "console.log(\"Node 2\")",
+      "code": "console.log(\"Node 2\")\nreturn params.outputs[params.outputs.length - 1]",
       "id": "1752603053763"
     },
     "1752604918866": {

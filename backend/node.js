@@ -1,13 +1,13 @@
 
 
-
 function runFlow(flowConfig, nodeMap, env) {
     const outputs = {
-        nodeOutputs: {}
+        nodeOutputs: {},
+        chain: []
     }
     flowConfig.nodes.forEach(nodeConfig => {
         try {
-            const res = runNodeInFlow(nodeConfig, nodeMap, env, outputs.nodeOutputs);
+            const res = runNodeInFlow(nodeConfig, nodeMap, env, outputs.nodeOutputs, outputs.chain);
         } catch (e) {
             outputs.error = `Failed to execute workflow. ${e?.toString()}`
         }
@@ -16,15 +16,16 @@ function runFlow(flowConfig, nodeMap, env) {
     return outputs;
 }
 
-function runNodeInFlow(nodeConfig, nodeMap, env, outputContext) {
+function runNodeInFlow(nodeConfig, nodeMap, env, outputContext, outputChain) {
     const { id, type, next } = nodeConfig;
     if (type === "node") {
         const node = nodeMap[id];
         try {
-            const res = runNode(node, env)
+            const res = runNode(node, env, outputChain)
             outputContext[id] = {
                 output: res || null
             };
+            outputChain.push(res);
         } catch (e) {
             outputContext[id] = {
                 error: e?.toString()
@@ -32,7 +33,7 @@ function runNodeInFlow(nodeConfig, nodeMap, env, outputContext) {
             throw new Error(`Failed to run node ${node.name}.`);
         }
         if (next) {
-            runNodeInFlow(next, nodeMap, env, outputContext)
+            runNodeInFlow(next, nodeMap, env, outputContext, outputChain)
         }
     } else if (type === "flow") { }
     else {
@@ -40,7 +41,7 @@ function runNodeInFlow(nodeConfig, nodeMap, env, outputContext) {
     }
 }
 
-function runNode(node, env = {}) {
+function runNode(node, env = {}, outputChain = []) {
 
     let nodeFunc;
     const id = node.id;
@@ -53,7 +54,7 @@ function runNode(node, env = {}) {
     }
 
     try {
-        const res = nodeFunc({ env });
+        const res = nodeFunc({ env, outputs: outputChain });
         return res;
     } catch (e) {
         throw new Error(
@@ -63,35 +64,6 @@ function runNode(node, env = {}) {
 
 }
 
-
-const flow = {
-    type: "flow",
-    nodes: [
-        {
-            id: "node1",
-            type: "node",
-            next: {
-                id: "node2",
-                type: "node"
-            }
-        }
-    ]
-}
-
-const nodeMap = {
-    node1: {
-        name: "First Node",
-        code: `
-            console.log("Executed First Node.")
-        `
-    },
-    node2: {
-        name: "Second Node",
-        code: `
-            console.log("Executed Second Node.")
-        `
-    }
-}
 
 const fastify = require('fastify')();
 const cors = require('@fastify/cors');
