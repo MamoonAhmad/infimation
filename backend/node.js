@@ -1,13 +1,13 @@
 
 
 
-function runFlow(flowConfig, nodeMap) {
+function runFlow(flowConfig, nodeMap, env) {
     const outputs = {
         nodeOutputs: {}
     }
     flowConfig.nodes.forEach(nodeConfig => {
         try {
-            const res = runNodeInFlow(nodeConfig, nodeMap, outputs.nodeOutputs);
+            const res = runNodeInFlow(nodeConfig, nodeMap, env, outputs.nodeOutputs);
         } catch (e) {
             outputs.error = `Failed to execute workflow. ${e?.toString()}`
         }
@@ -16,12 +16,12 @@ function runFlow(flowConfig, nodeMap) {
     return outputs;
 }
 
-function runNodeInFlow(nodeConfig, nodeMap, outputContext) {
+function runNodeInFlow(nodeConfig, nodeMap, env, outputContext) {
     const { id, type, next } = nodeConfig;
     if (type === "node") {
         const node = nodeMap[id];
         try {
-            const res = runNode(node)
+            const res = runNode(node, env)
             outputContext[id] = {
                 output: res || null
             };
@@ -32,7 +32,7 @@ function runNodeInFlow(nodeConfig, nodeMap, outputContext) {
             throw new Error(`Failed to run node ${node.name}.`);
         }
         if (next) {
-            runNodeInFlow(next, nodeMap, outputContext)
+            runNodeInFlow(next, nodeMap, env, outputContext)
         }
     } else if (type === "flow") { }
     else {
@@ -40,12 +40,12 @@ function runNodeInFlow(nodeConfig, nodeMap, outputContext) {
     }
 }
 
-function runNode(node) {
+function runNode(node, env = {}) {
 
     let nodeFunc;
     const id = node.id;
     try {
-        nodeFunc = new Function(node.code);
+        nodeFunc = new Function("params", node.code);
     } catch (e) {
         throw new Error(
             `Error creating the node function ${node.name || ""} (${id}): ${e}`
@@ -53,7 +53,7 @@ function runNode(node) {
     }
 
     try {
-        const res = nodeFunc();
+        const res = nodeFunc({ env });
         return res;
     } catch (e) {
         throw new Error(
@@ -118,7 +118,14 @@ const WORKFLOW_FILE = path.join(__dirname, 'workflow.json');
 fastify.post('/workflow', async (request, reply) => {
     const { flow, nodeMap } = request.body;
     try {
-        fs.writeFileSync(WORKFLOW_FILE, JSON.stringify({ flow, nodeMap }, null, 2));
+        let workflow = { flow, nodeMap }
+        if (fs.existsSync(WORKFLOW_FILE)) {
+            let data = fs.readFileSync(WORKFLOW_FILE, 'utf-8');
+            data = JSON.parse(data);
+            workflow = { ...data, ...workflow };
+        }
+
+        fs.writeFileSync(WORKFLOW_FILE, JSON.stringify(workflow, null, 2));
         reply.send({ success: true });
     } catch (e) {
         reply.status(500).send({ success: false, error: e.message });
@@ -133,6 +140,39 @@ fastify.get('/workflow', async (request, reply) => {
         }
         const data = fs.readFileSync(WORKFLOW_FILE, 'utf-8');
         reply.send(JSON.parse(data));
+    } catch (e) {
+        reply.status(500).send({ error: e.message });
+    }
+});
+
+// --- ENVIRONMENT VARIABLES ENDPOINTS ---
+// Save environment variables
+fastify.post('/environment-variables', async (request, reply) => {
+    try {
+        let envVars = request.body;
+        if (typeof envVars !== 'object' || Array.isArray(envVars)) {
+            return reply.status(400).send({ error: 'Environment variables must be a JSON object.' });
+        }
+        let workflow = { flow: {}, nodeMap: {}, env: {} };
+        if (fs.existsSync(WORKFLOW_FILE)) {
+            workflow = JSON.parse(fs.readFileSync(WORKFLOW_FILE, 'utf-8'));
+        }
+        workflow.env = envVars;
+        fs.writeFileSync(WORKFLOW_FILE, JSON.stringify(workflow, null, 2));
+        reply.send({ success: true });
+    } catch (e) {
+        reply.status(500).send({ error: e.message });
+    }
+});
+
+// Get environment variables
+fastify.get('/environment-variables', async (request, reply) => {
+    try {
+        if (!fs.existsSync(WORKFLOW_FILE)) {
+            return reply.send({});
+        }
+        const workflow = JSON.parse(fs.readFileSync(WORKFLOW_FILE, 'utf-8'));
+        reply.send(workflow.env || {});
     } catch (e) {
         reply.status(500).send({ error: e.message });
     }
@@ -174,8 +214,8 @@ fastify.post('/run-workflow', async (request, reply) => {
             return reply.status(404).send({ error: 'Workflow not found' });
         }
         const data = fs.readFileSync(WORKFLOW_FILE, 'utf-8');
-        const { nodeMap, flow } = JSON.parse(data);
-        const output = runFlow(flow, nodeMap);
+        const { nodeMap, flow, env } = JSON.parse(data);
+        const output = runFlow(flow, nodeMap, env);
         reply.send(output);
     } catch (e) {
         reply.status(500).send({ error: e.message });

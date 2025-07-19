@@ -39,6 +39,12 @@ function App() {
   const [workflowRunOpen, setWorkflowRunOpen] = useState(false);
   const [selectedRunNode, setSelectedRunNode] = useState(null);
 
+  // Environment Variables State
+  const [envModalOpen, setEnvModalOpen] = useState(false);
+  const [envVars, setEnvVars] = useState("{}" );
+  const [envVarsError, setEnvVarsError] = useState(null);
+  const [savingEnvVars, setSavingEnvVars] = useState(false);
+
   // Load workflow from API on mount
   useEffect(() => {
     const loadWorkflow = async () => {
@@ -75,11 +81,26 @@ function App() {
         // There may be multiple roots in flow.nodes (array)
         flow.nodes.forEach((node, idx) => traverse(node, idx));
         setState({nodes: loadedNodes, edges: loadedEdges});
-      } catch (e) {
+      } catch {
         // Ignore errors (e.g., no workflow file)
       }
     };
     loadWorkflow();
+  }, []);
+
+  // Load environment variables on mount
+  useEffect(() => {
+    const loadEnvVars = async () => {
+      try {
+        const res = await fetch("http://localhost:3002/environment-variables");
+        if (!res.ok) return;
+        const data = await res.json();
+        setEnvVars(JSON.stringify(data, null, 2));
+      } catch {
+        // Ignore errors
+      }
+    };
+    loadEnvVars();
   }, []);
 
   const getNewNode = () => {
@@ -118,9 +139,7 @@ function App() {
     [nodes, edges]
   );
 
-  const handleNodeclick = (o, node) => {
-    console.log(o);
-    console.log(node);
+  const handleNodeclick = (__, node) => {
     setState({
       nodeToEdit: node,
       nodeToEditCode: node?.data?.code || "",
@@ -176,7 +195,7 @@ function App() {
     setState({
       savingWorkflow: true,
     });
-    const res = await fetch("http://localhost:3002/workflow", {
+    await fetch("http://localhost:3002/workflow", {
       method: "POST",
       body: JSON.stringify(workflow),
       headers: {
@@ -186,6 +205,35 @@ function App() {
     setState({
       savingWorkflow: false,
     });
+  };
+
+  const saveEnvVars = async () => {
+    setSavingEnvVars(true);
+    setEnvVarsError(null);
+    let parsed;
+    try {
+      parsed = JSON.parse(envVars);
+    } catch {
+      setEnvVarsError("Invalid JSON");
+      setSavingEnvVars(false);
+      return;
+    }
+    try {
+      const response = await fetch("http://localhost:3002/environment-variables", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      });
+      if (!response.ok) {
+        setEnvVarsError("Failed to save environment variables");
+      } else {
+        setEnvVarsError(null);
+        setEnvModalOpen(false);
+      }
+    } catch (err) {
+      setEnvVarsError(err.message);
+    }
+    setSavingEnvVars(false);
   };
 
   // Handler for running the workflow
@@ -238,6 +286,17 @@ function App() {
             e.stopPropagation();
             e.preventDefault();
 
+            setEnvModalOpen(true);
+          }}
+        >
+          <Plus />
+          Environment Variables
+        </Button>
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
             const node = getNewNode();
             addNewNode(node);
           }}
@@ -276,6 +335,102 @@ function App() {
           Run Workflow
         </Button>
       </div>
+
+      {/* Environment Variables Modal */}
+      <Modal open={envModalOpen} onOpenChange={setEnvModalOpen}>
+        <DialogContent className="min-w-[500px] flex flex-col gap-4">
+          <DialogHeader>
+            <h2 className="text-lg font-bold">Environment Variables</h2>
+          </DialogHeader>
+          <Label htmlFor="env-json">Key-Value Pairs (JSON)</Label>
+          <Textarea
+            id="env-json"
+            className="font-mono min-h-[200px]"
+            value={envVars}
+            onChange={e => setEnvVars(e.target.value)}
+          />
+          {envVarsError && (
+            <div className="text-red-600 text-xs">{envVarsError}</div>
+          )}
+          <DialogFooter>
+            <Button onClick={saveEnvVars} disabled={savingEnvVars}>
+              {savingEnvVars ? <LoaderCircle className="animate-spin" /> : <Save />} Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Modal>
+
+      {/* Workflow Run Modal */}
+      <Modal open={workflowRunOpen} onOpenChange={setWorkflowRunOpen}>
+        <DialogContent className="h-[80vh] min-w-[80vw] flex flex-col justify-start">
+          <DialogHeader>
+            <h2 className="text-xl font-bold">Workflow Run</h2>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 grow">
+            <ReactFlow
+              nodes={nodes.map((n) => {
+                let style = {};
+                if (workflowRun?.nodeOutputs?.[n.id]?.error) {
+                  style = {border: "2px solid red", background: "#ffe5e5"};
+                } else if (workflowRun?.nodeOutputs?.[n.id]) {
+                  style = {border: "2px solid #4ade80", background: "#f0fdf4"};
+                }
+                return {
+                  ...n,
+                  style,
+                };
+              })}
+              edges={edges}
+              onNodeClick={(_, node) => setSelectedRunNode(node)}
+              fitView
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
+            {selectedRunNode && (
+              <div className="mt-4">
+                <h3 className="font-semibold mb-2">
+                  Node Output: {selectedRunNode.data.label}
+                </h3>
+                {workflowRun?.nodeOutputs?.[selectedRunNode.id] ===
+                undefined ? (
+                  <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">
+                    Node did not run.
+                  </pre>
+                ) : workflowRun?.nodeOutputs?.[selectedRunNode.id]?.error ? (
+                  <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">
+                    {JSON.stringify(
+                      workflowRun.nodeOutputs[selectedRunNode.id].error,
+                      null,
+                      2
+                    )}
+                  </pre>
+                ) : (
+                  <pre className="bg-gray-100 text-gray-800 p-2 rounded text-xs whitespace-pre-wrap">
+                    {workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output ===
+                      undefined ||
+                    workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output ===
+                      null
+                      ? "Node did not return any output."
+                      : JSON.stringify(
+                          workflowRun.nodeOutputs[selectedRunNode.id].output,
+                          null,
+                          2
+                        )}
+                  </pre>
+                )}
+              </div>
+            )}
+            {workflowRun?.error && (
+              <div className="mt-4">
+                <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">
+                  {JSON.stringify(workflowRun.error, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Modal>
 
       {
         <Dialog
@@ -404,78 +559,6 @@ function App() {
           </DialogContent>
         </Dialog>
       }
-
-      {/* Workflow Run Modal */}
-      <Modal open={workflowRunOpen} onOpenChange={setWorkflowRunOpen}>
-        <DialogContent className="h-[80vh] min-w-[80vw] flex flex-col justify-start">
-          <DialogHeader>
-            <h2 className="text-xl font-bold">Workflow Run</h2>
-          </DialogHeader>
-          <div className="flex flex-col gap-4 grow">
-            <ReactFlow
-              nodes={nodes.map((n) => {
-                let style = {};
-                if (workflowRun?.nodeOutputs?.[n.id]?.error) {
-                  style = {border: "2px solid red", background: "#ffe5e5"};
-                } else if (workflowRun?.nodeOutputs?.[n.id]) {
-                  style = {border: "2px solid #4ade80", background: "#f0fdf4"};
-                }
-                return {
-                  ...n,
-                  style,
-                };
-              })}
-              edges={edges}
-              onNodeClick={(_, node) => setSelectedRunNode(node)}
-              fitView
-            >
-              <Background />
-              <Controls />
-            </ReactFlow>
-            {selectedRunNode && (
-              <div className="mt-4">
-                <h3 className="font-semibold mb-2">
-                  Node Output: {selectedRunNode.data.label}
-                </h3>
-                {workflowRun?.nodeOutputs?.[selectedRunNode.id] ===
-                undefined ? (
-                  <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">
-                    Node did not run.
-                  </pre>
-                ) : workflowRun?.nodeOutputs?.[selectedRunNode.id]?.error ? (
-                  <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">
-                    {JSON.stringify(
-                      workflowRun.nodeOutputs[selectedRunNode.id].error,
-                      null,
-                      2
-                    )}
-                  </pre>
-                ) : (
-                  <pre className="bg-gray-100 text-gray-800 p-2 rounded text-xs whitespace-pre-wrap">
-                    {workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output ===
-                      undefined ||
-                    workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output ===
-                      null
-                      ? "Node did not return any output."
-                      : JSON.stringify(
-                          workflowRun.nodeOutputs[selectedRunNode.id].output,
-                          null,
-                          2
-                        )}
-                  </pre>
-                )}
-              </div>
-            )}
-            {workflowRun?.error && (
-              <div className="mt-4">
-                <pre className="bg-red-100 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">
-                  {JSON.stringify(workflowRun.error, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Modal>
     </>
   );
 }
