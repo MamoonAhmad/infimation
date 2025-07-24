@@ -1,27 +1,27 @@
 
 
-function runFlow(flowConfig, nodeMap, env) {
+async function runFlow(flowConfig, nodeMap, env) {
     const outputs = {
         nodeOutputs: {},
         chain: []
     }
-    flowConfig.nodes.forEach(nodeConfig => {
+    for (const nodeConfig of flowConfig.nodes) {
         try {
-            const res = runNodeInFlow(nodeConfig, nodeMap, env, outputs.nodeOutputs, outputs.chain);
+            const res = await runNodeInFlow(nodeConfig, nodeMap, env, outputs.nodeOutputs, outputs.chain);
         } catch (e) {
             outputs.error = `Failed to execute workflow. ${e?.toString()}`
         }
-    });
+    }
 
     return outputs;
 }
 
-function runNodeInFlow(nodeConfig, nodeMap, env, outputContext, outputChain) {
+async function runNodeInFlow(nodeConfig, nodeMap, env, outputContext, outputChain) {
     const { id, type, next } = nodeConfig;
     if (type === "node") {
         const node = nodeMap[id];
         try {
-            const res = runNode(node, env, outputChain)
+            const res = await runNode(node, env, outputChain)
             outputContext[id] = {
                 output: res || null
             };
@@ -33,7 +33,7 @@ function runNodeInFlow(nodeConfig, nodeMap, env, outputContext, outputChain) {
             throw new Error(`Failed to run node ${node.name}.`);
         }
         if (next) {
-            runNodeInFlow(next, nodeMap, env, outputContext, outputChain)
+            await runNodeInFlow(next, nodeMap, env, outputContext, outputChain)
         }
     } else if (type === "flow") { }
     else {
@@ -41,12 +41,27 @@ function runNodeInFlow(nodeConfig, nodeMap, env, outputContext, outputChain) {
     }
 }
 
-function runNode(node, env = {}, outputChain = []) {
-
+async function runNode(node, env = {}, outputChain = []) {
     let nodeFunc;
     const id = node.id;
+    
+    // If node has a template_id, fetch the template and use its code
+    if (node.template_id) {
+        try {
+            const templates = JSON.parse(fs.readFileSync(TEMPLATES_FILE, 'utf-8'));
+            const template = templates.find(t => t.id === node.template_id);
+            if (!template) {
+                throw new Error(`Template with ID ${node.template_id} not found`);
+            }
+            node.code = template.code;
+        } catch (e) {
+            throw new Error(`Error loading template ${node.template_id}: ${e.message}`);
+        }
+    }
+    
     try {
-        nodeFunc = new Function("params", node.code);
+        // Create async function from node code
+        nodeFunc = new Function("params", `return (async () => { ${node.code} })()`);
     } catch (e) {
         throw new Error(
             `Error creating the node function ${node.name || ""} (${id}): ${e}`
@@ -54,14 +69,17 @@ function runNode(node, env = {}, outputChain = []) {
     }
 
     try {
-        const res = nodeFunc({ env, outputs: outputChain });
+        const res = await nodeFunc({ 
+            env, 
+            outputs: outputChain,
+            settings: node.settings || {}
+        });
         return res;
     } catch (e) {
         throw new Error(
             `Error executing the node ${node.name || ""} (${id}): ${e}`
         );
     }
-
 }
 
 
@@ -85,6 +103,7 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function
 });
 
 const WORKFLOW_FILE = path.join(__dirname, 'workflow.json');
+const TEMPLATES_FILE = path.join(__dirname, 'node_templates.json');
 
 // Endpoint to save workflow
 fastify.post('/workflow', async (request, reply) => {
@@ -168,7 +187,7 @@ fastify.post('/run-node', async (request, reply) => {
         }
         let output;
         try {
-            output = runNode(node);
+            output = await runNode(node);
         } catch (err) {
             return reply.status(500).send({ error: err.message });
         }
@@ -187,8 +206,66 @@ fastify.post('/run-workflow', async (request, reply) => {
         }
         const data = fs.readFileSync(WORKFLOW_FILE, 'utf-8');
         const { nodeMap, flow, env } = JSON.parse(data);
-        const output = runFlow(flow, nodeMap, env);
+        const output = await runFlow(flow, nodeMap, env);
         reply.send(output);
+    } catch (e) {
+        reply.status(500).send({ error: e.message });
+    }
+});
+
+// --- NODE TEMPLATES ENDPOINTS ---
+// Get all node templates
+fastify.get('/node-templates', async (request, reply) => {
+    try {
+        if (!fs.existsSync(TEMPLATES_FILE)) {
+            return reply.send([]);
+        }
+        const templates = JSON.parse(fs.readFileSync(TEMPLATES_FILE, 'utf-8'));
+        reply.send(templates);
+    } catch (e) {
+        reply.status(500).send({ error: e.message });
+    }
+});
+
+// Get a specific node template by ID
+fastify.get('/node-templates/:id', async (request, reply) => {
+    try {
+        const { id } = request.params;
+        if (!fs.existsSync(TEMPLATES_FILE)) {
+            return reply.status(404).send({ error: 'Template not found' });
+        }
+        const templates = JSON.parse(fs.readFileSync(TEMPLATES_FILE, 'utf-8'));
+        const template = templates.find(t => t.id === id);
+        if (!template) {
+            return reply.status(404).send({ error: 'Template not found' });
+        }
+        reply.send(template);
+    } catch (e) {
+        reply.status(500).send({ error: e.message });
+    }
+});
+
+// Create a new node template
+fastify.post('/node-templates', async (request, reply) => {
+    try {
+        const newTemplate = request.body;
+        if (!newTemplate.id || !newTemplate.name || !newTemplate.setting_schema || !newTemplate.code) {
+            return reply.status(400).send({ error: 'Missing required fields: id, name, setting_schema, code' });
+        }
+        
+        let templates = [];
+        if (fs.existsSync(TEMPLATES_FILE)) {
+            templates = JSON.parse(fs.readFileSync(TEMPLATES_FILE, 'utf-8'));
+        }
+        
+        // Check if template with same ID already exists
+        if (templates.find(t => t.id === newTemplate.id)) {
+            return reply.status(400).send({ error: 'Template with this ID already exists' });
+        }
+        
+        templates.push(newTemplate);
+        fs.writeFileSync(TEMPLATES_FILE, JSON.stringify(templates, null, 2));
+        reply.send({ success: true, template: newTemplate });
     } catch (e) {
         reply.status(500).send({ error: e.message });
     }

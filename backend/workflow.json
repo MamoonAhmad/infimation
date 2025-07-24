@@ -22,7 +22,11 @@
                   "id": "1752625647690",
                   "next": {
                     "type": "node",
-                    "id": "1752625710872"
+                    "id": "1752625710872",
+                    "next": {
+                      "type": "node",
+                      "id": "1752894636199"
+                    }
                   }
                 }
               }
@@ -36,37 +40,55 @@
     "1752602644455": {
       "name": "Node 1",
       "code": "return params.env",
-      "id": "1752602644455"
+      "id": "1752602644455",
+      "settings": {}
     },
     "1752603053763": {
       "name": "Node 2",
       "code": "console.log(\"Node 2\")\nreturn params.outputs[params.outputs.length - 1]",
-      "id": "1752603053763"
+      "id": "1752603053763",
+      "settings": {}
     },
     "1752604918866": {
       "name": "Node 3",
       "code": "return {another: 1, something: 2}",
-      "id": "1752604918866"
+      "id": "1752604918866",
+      "settings": {}
     },
     "1752625614146": {
       "name": "1752625614146",
       "code": "",
-      "id": "1752625614146"
+      "id": "1752625614146",
+      "settings": {}
     },
     "1752625647135": {
       "name": "1752625647135",
       "code": "",
-      "id": "1752625647135"
+      "id": "1752625647135",
+      "settings": {}
     },
     "1752625647690": {
       "name": "1752625647690",
       "code": "",
-      "id": "1752625647690"
+      "id": "1752625647690",
+      "settings": {}
     },
     "1752625710872": {
       "name": "1752625710872",
       "code": "",
-      "id": "1752625710872"
+      "id": "1752625710872",
+      "settings": {}
+    },
+    "1752894636199": {
+      "name": "Request To Dog API",
+      "code": "const response = await fetch(params.settings.url, {\n  method: params.settings.method || 'GET',\n  headers: params.settings.headers ? JSON.parse(params.settings.headers) : {}\n});\nreturn await response.json();",
+      "id": "1752894636199",
+      "template_id": "http_request",
+      "settings": {
+        "url": "https://dog.ceo/api/breeds/list/all",
+        "method": "GET",
+        "headers": ""
+      }
     }
   },
   "env": {

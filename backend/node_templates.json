@@ -1,0 +1,43 @@
+[
+  {
+    "id": "http_request",
+    "name": "HTTP Request",
+    "setting_schema": {
+      "url": {
+        "label": "URL",
+        "type": "string"
+      },
+      "method": {
+        "label": "HTTP Method",
+        "type": "string"
+      },
+      "headers": {
+        "label": "Headers (JSON)",
+        "type": "string"
+      }
+    },
+    "code": "const response = await fetch(params.settings.url, {\n  method: params.settings.method || 'GET',\n  headers: params.settings.headers ? JSON.parse(params.settings.headers) : {}\n});\nreturn await response.json();"
+  },
+  {
+    "id": "console_log",
+    "name": "Console Log",
+    "setting_schema": {
+      "message": {
+        "label": "Message",
+        "type": "string"
+      }
+    },
+    "code": "console.log(params.settings.message);\nreturn { logged: params.settings.message };"
+  },
+  {
+    "id": "data_transform",
+    "name": "Data Transform",
+    "setting_schema": {
+      "operation": {
+        "label": "Operation",
+        "type": "string"
+      }
+    },
+    "code": "// Transform data based on operation\nconst lastOutput = params.outputs[params.outputs.length - 1];\nif (params.settings.operation === 'uppercase' && typeof lastOutput === 'string') {\n  return lastOutput.toUpperCase();\n}\nreturn lastOutput;"
+  }
+]

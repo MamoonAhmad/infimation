@@ -45,6 +45,15 @@ function App() {
   const [envVarsError, setEnvVarsError] = useState(null);
   const [savingEnvVars, setSavingEnvVars] = useState(false);
 
+  // Node Templates State
+  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  // Node Settings State
+  const [nodeTemplate, setNodeTemplate] = useState(null);
+  const [loadingNodeTemplate, setLoadingNodeTemplate] = useState(false);
+
   // Load workflow from API on mount
   useEffect(() => {
     const loadWorkflow = async () => {
@@ -61,12 +70,15 @@ function App() {
         function traverse(node, idx) {
           if (!node || visited.has(node.id)) return;
           visited.add(node.id);
+          const nodeData = nodeMap[node.id];
           loadedNodes.push({
             id: node.id,
             position: {x: 100, y: (loadedNodes.length + 1) * 100},
             data: {
-              label: nodeMap[node.id]?.name || node.id,
-              code: nodeMap[node.id]?.code || "",
+              label: nodeData?.name || node.id,
+              code: nodeData?.code || "",
+              template_id: nodeData?.template_id,
+              settings: nodeData?.settings || {},
             },
           });
           if (node.next && node.next.id) {
@@ -103,13 +115,24 @@ function App() {
     loadEnvVars();
   }, []);
 
-  const getNewNode = () => {
-    const id = new Date().getTime().toString();
-    return {
-      id,
-      code: `console.log("Node Executed ${id}")`,
+  // Load templates on mount
+  useEffect(() => {
+    const loadTemplates = async () => {
+      setLoadingTemplates(true);
+      try {
+        const res = await fetch("http://localhost:3002/node-templates");
+        if (res.ok) {
+          const data = await res.json();
+          setTemplates(data);
+        }
+      } catch {
+        // Ignore errors
+      } finally {
+        setLoadingTemplates(false);
+      }
     };
-  };
+    loadTemplates();
+  }, []);
 
   const addNewNode = useCallback(
     (node) => {
@@ -119,7 +142,7 @@ function App() {
           {
             id: node.id,
             position: {x: 100, y: (nodes.length + 1) * 100},
-            data: {label: node.id},
+            data: {label: node.name || node.id, code: node.code, template_id: node.template_id, settings: node.settings},
           },
         ],
       });
@@ -139,12 +162,51 @@ function App() {
     [nodes, edges]
   );
 
+  const createNodeFromTemplate = (template) => {
+    const id = new Date().getTime().toString();
+    const newNode = {
+      id,
+      name: template.name,
+      template_id: template.id,
+      settings: Object.keys(template.setting_schema).reduce((acc, key) => {
+        acc[key] = "";
+        return acc;
+      }, {}),
+      code: template.code
+    };
+    
+    addNewNode(newNode);
+    setTemplatesModalOpen(false);
+  };
+
   const handleNodeclick = (__, node) => {
     setState({
       nodeToEdit: node,
       nodeToEditCode: node?.data?.code || "",
       nodeToEditName: node?.data?.label || "",
     });
+    
+    // Load template if node has template_id
+    if (node?.data?.template_id) {
+      loadNodeTemplate(node.data.template_id);
+    } else {
+      setNodeTemplate(null);
+    }
+  };
+
+  const loadNodeTemplate = async (templateId) => {
+    setLoadingNodeTemplate(true);
+    try {
+      const res = await fetch(`http://localhost:3002/node-templates/${templateId}`);
+      if (res.ok) {
+        const template = await res.json();
+        setNodeTemplate(template);
+      }
+    } catch {
+      // Ignore errors
+    } finally {
+      setLoadingNodeTemplate(false);
+    }
   };
 
   const createWorkflow = () => {
@@ -154,6 +216,8 @@ function App() {
         name: node.data.label,
         code: node.data.code,
         id: node.id,
+        template_id: node.data.template_id,
+        settings: node.data.settings || {},
       };
       return acc;
     }, {});
@@ -297,8 +361,7 @@ function App() {
             e.stopPropagation();
             e.preventDefault();
 
-            const node = getNewNode();
-            addNewNode(node);
+            setTemplatesModalOpen(true);
           }}
         >
           <Plus />
@@ -406,7 +469,7 @@ function App() {
                     )}
                   </pre>
                 ) : (
-                  <pre className="bg-gray-100 text-gray-800 p-2 rounded text-xs whitespace-pre-wrap">
+                  <pre className="bg-gray-100 text-gray-800 p-2 rounded text-xs whitespace-pre-wrap max-h-64 overflow-auto">
                     {workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output ===
                       undefined ||
                     workflowRun?.nodeOutputs?.[selectedRunNode.id]?.output ===
@@ -432,6 +495,39 @@ function App() {
         </DialogContent>
       </Modal>
 
+      {/* Node Templates Modal */}
+      <Modal open={templatesModalOpen} onOpenChange={setTemplatesModalOpen}>
+        <DialogContent className="min-w-[500px] flex flex-col gap-4">
+          <DialogHeader>
+            <h2 className="text-lg font-bold">Select Node Template</h2>
+          </DialogHeader>
+          {loadingTemplates ? (
+            <div className="text-center py-8">
+              <LoaderCircle className="animate-spin" />
+              <p>Loading templates...</p>
+            </div>
+          ) : templates.length === 0 ? (
+            <p>No node templates found. Please add one in the backend.</p>
+          ) : (
+            <div className="grid gap-4">
+              {templates.map((template) => (
+                <Button
+                  key={template.id}
+                  onClick={() => createNodeFromTemplate(template)}
+                  className="flex items-center justify-start gap-2"
+                >
+                  <Play />
+                  {template.name}
+                </Button>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setTemplatesModalOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Modal>
+
       {
         <Dialog
           open={!!state.nodeToEdit}
@@ -454,6 +550,9 @@ function App() {
             <Tabs className={"grow"}>
               <TabsList defaultValue="info" className={"w-full"}>
                 <TabsTrigger value="info">Info</TabsTrigger>
+                {state.nodeToEdit?.data?.template_id && (
+                  <TabsTrigger value="settings">Settings</TabsTrigger>
+                )}
                 <TabsTrigger value="run">Run</TabsTrigger>
               </TabsList>
               <TabsContent value="info" className={"gap-2 flex flex-col pt-5"}>
@@ -490,6 +589,53 @@ function App() {
                   </Button>
                 </DialogFooter>
               </TabsContent>
+              {state.nodeToEdit?.data?.template_id && (
+                <TabsContent value="settings" className={"gap-2 flex flex-col pt-5"}>
+                  {loadingNodeTemplate ? (
+                    <div className="text-center py-8">
+                      <LoaderCircle className="animate-spin" />
+                      <p>Loading template settings...</p>
+                    </div>
+                  ) : nodeTemplate ? (
+                    <div className="flex flex-col gap-4">
+                      <Label>Template Settings</Label>
+                      {Object.entries(nodeTemplate.setting_schema).map(([key, schema]) => (
+                        <div key={key} className="flex flex-col gap-2">
+                          <Label htmlFor={`setting-${key}`}>{schema.label}</Label>
+                          <Input
+                            id={`setting-${key}`}
+                            type={schema.type === "number" ? "number" : "text"}
+                            value={state.nodeToEdit?.data?.settings?.[key] || ""}
+                            onChange={(e) => {
+                              const newSettings = {
+                                ...state.nodeToEdit.data.settings,
+                                [key]: e.target.value
+                              };
+                              state.nodeToEdit.data.settings = newSettings;
+                              setState({
+                                nodeToEdit: { ...state.nodeToEdit }
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                      <DialogFooter>
+                        <Button
+                          onClick={() => {
+                            setState({
+                              nodeToEdit: undefined,
+                            });
+                          }}
+                        >
+                          Save
+                        </Button>
+                      </DialogFooter>
+                    </div>
+                  ) : (
+                    <p>Failed to load template settings.</p>
+                  )}
+                </TabsContent>
+              )}
               <TabsContent value="run" className={"gap-2 flex flex-col pt-5"}>
                 <div className="flex flex-col gap-2">
                   <Button
