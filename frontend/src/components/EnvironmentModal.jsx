@@ -8,7 +8,7 @@ import useEnvironmentStore from "../stores/environmentStore";
 import useUIStore from "../stores/uiStore";
 
 export function EnvironmentModal() {
-  const { envVars, setEnvVars, saveEnvironmentVariables } =
+  const { envVars, saveEnvironmentVariables } =
     useEnvironmentStore();
   const { envModalOpen, setEnvModalOpen } = useUIStore();
 

@@ -4,7 +4,7 @@ import environmentService from "../services/environmentService";
 
 const useEnvironmentStore = create(
   devtools(
-    (set, get) => ({
+    (set) => ({
       // Environment variables state
       envVars: {},
 

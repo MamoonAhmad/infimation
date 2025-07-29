@@ -3,7 +3,7 @@ import { devtools } from 'zustand/middleware';
 
 const useUIStore = create(
   devtools(
-    (set, get) => ({
+    (set) => ({
       // Modal states
       envModalOpen: false,
       templatesModalOpen: false,
