@@ -92,6 +92,7 @@
     }
   },
   "env": {
-    "some_env": 1
+    "some_env": 1,
+    "another": 1
   }
 }
