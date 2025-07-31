@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import workflowService from "../services/workflowService";
+import { MarkerType } from "@xyflow/react";
 
 const useWorkflowStore = create(
   devtools(
@@ -34,6 +35,10 @@ const useWorkflowStore = create(
             id: new Date().getTime().toString() + "1",
             source: nodes[nodes.length - 1].id,
             target: node.id,
+            type: "floating",
+            markerEnd: {
+              type: MarkerType.Arrow,
+            },
           };
           set({ edges: [...edges, newEdge] });
         }
@@ -61,7 +66,23 @@ const useWorkflowStore = create(
       loadWorkflow: async () => {
         try {
           const { nodes, edges } = await workflowService.loadWorkflow();
-          set({ nodes, edges });
+          set({
+            nodes: nodes.map((node) => ({ ...node })),
+            edges: edges.map((e) => ({
+              ...e,
+              type: "floating",
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 20,
+                height: 15,
+                color: "#000",
+              },
+              style: {
+                strokeWidth: 2,
+                stroke: "#000",
+              },
+            })),
+          });
         } catch (error) {
           console.error("Failed to load workflow:", error);
         }
