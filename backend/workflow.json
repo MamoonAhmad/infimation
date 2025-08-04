@@ -41,43 +41,85 @@
       "name": "Node 1",
       "code": "return params.env",
       "id": "1752602644455",
-      "settings": {}
+      "settings": {},
+      "render_config": {
+        "position": {
+          "x": 100,
+          "y": 100
+        }
+      }
     },
     "1752603053763": {
       "name": "Node 2",
       "code": "console.log(\"Node 2\")\nreturn params.outputs[params.outputs.length - 1]",
       "id": "1752603053763",
-      "settings": {}
+      "settings": {},
+      "render_config": {
+        "position": {
+          "x": 341.83890797862307,
+          "y": 70.87334325123297
+        }
+      }
     },
     "1752604918866": {
       "name": "Node 3",
       "code": "return {another: 1, something: 2}",
       "id": "1752604918866",
-      "settings": {}
+      "settings": {},
+      "render_config": {
+        "position": {
+          "x": 490.6628513500833,
+          "y": 203.7021542890551
+        }
+      }
     },
     "1752625614146": {
       "name": "1752625614146",
       "code": "",
       "id": "1752625614146",
-      "settings": {}
+      "settings": {},
+      "render_config": {
+        "position": {
+          "x": 656,
+          "y": 88
+        }
+      }
     },
     "1752625647135": {
       "name": "1752625647135",
       "code": "",
       "id": "1752625647135",
-      "settings": {}
+      "settings": {},
+      "render_config": {
+        "position": {
+          "x": 636,
+          "y": 274
+        }
+      }
     },
     "1752625647690": {
       "name": "1752625647690",
       "code": "",
       "id": "1752625647690",
-      "settings": {}
+      "settings": {},
+      "render_config": {
+        "position": {
+          "x": 953,
+          "y": 116
+        }
+      }
     },
     "1752625710872": {
       "name": "1752625710872",
       "code": "",
       "id": "1752625710872",
-      "settings": {}
+      "settings": {},
+      "render_config": {
+        "position": {
+          "x": 886,
+          "y": 332
+        }
+      }
     },
     "1752894636199": {
       "name": "Request To Dog API",
@@ -88,6 +130,12 @@
         "url": "https://dog.ceo/api/breeds/list/all",
         "method": "GET",
         "headers": ""
+      },
+      "render_config": {
+        "position": {
+          "x": 599,
+          "y": 387.875
+        }
       }
     }
   },
