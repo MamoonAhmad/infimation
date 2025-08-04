@@ -76,7 +76,6 @@ function App() {
    * @param {import('@xyflow/react').NodeChange[]} changes - Array of node changes
    */
   const handleNodesChange = (changes) => {
-    console.log(changes);
     setNodes(applyNodeChanges(changes, nodes));
   };
 
