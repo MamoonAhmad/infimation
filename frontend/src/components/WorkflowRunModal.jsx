@@ -1,28 +1,28 @@
 import { useState } from "react";
 import { Dialog as Modal, DialogContent, DialogHeader } from "./ui/dialog";
-import { Background, Controls, ReactFlow } from "@xyflow/react";
+import { Background, Controls } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import useWorkflowStore from "../stores/workflowStore";
 import useUIStore from "../stores/uiStore";
+import { ReactFlow } from "./ReactFlow/ReactFlow";
 
 export function WorkflowRunModal() {
   const { nodes, edges } = useWorkflowStore();
-  const {
-    workflowRunOpen,
-    workflowRun,
-    setWorkflowRunOpen,
-  } = useUIStore();
+  const { workflowRunOpen, workflowRun, setWorkflowRunOpen } = useUIStore();
 
   // Local state for selected node in workflow run
   const [selectedRunNode, setSelectedRunNode] = useState(null);
 
   return (
-    <Modal open={workflowRunOpen} onOpenChange={(open) => {
-      setWorkflowRunOpen(open);
-      if (!open) {
-        setSelectedRunNode(null);
-      }
-    }}>
+    <Modal
+      open={workflowRunOpen}
+      onOpenChange={(open) => {
+        setWorkflowRunOpen(open);
+        if (!open) {
+          setSelectedRunNode(null);
+        }
+      }}
+    >
       <DialogContent className="h-[80vh] min-w-[80vw] flex flex-col justify-start">
         <DialogHeader>
           <h2 className="text-xl font-bold">Workflow Run</h2>
@@ -30,15 +30,13 @@ export function WorkflowRunModal() {
         <div className="flex flex-col gap-4 grow">
           <ReactFlow
             nodes={nodes.map((n) => {
-              let style = {};
-              if (workflowRun?.nodeOutputs?.[n.id]?.error) {
-                style = { border: "2px solid red", background: "#ffe5e5" };
-              } else if (workflowRun?.nodeOutputs?.[n.id]) {
-                style = { border: "2px solid #4ade80", background: "#f0fdf4" };
-              }
               return {
                 ...n,
-                style,
+                data: {
+                  ...n.data,
+                  workflow_node_type: "workflow_run_node",
+                  success: !workflowRun?.nodeOutputs?.[n.id]?.error,
+                },
               };
             })}
             edges={edges}
@@ -92,4 +90,4 @@ export function WorkflowRunModal() {
       </DialogContent>
     </Modal>
   );
-} 
+}

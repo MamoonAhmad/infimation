@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import {
   Background,
   Controls,
+  MarkerType,
+  addEdge,
   applyEdgeChanges,
   applyNodeChanges,
 } from "@xyflow/react";
@@ -78,6 +80,28 @@ function App() {
     setNodes(applyNodeChanges(changes, nodes));
   };
 
+  const handleOnConnect = (params) => {
+    const e = addEdge(
+      {
+        ...params,
+        type: "floating",
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 15,
+          color: "#000",
+        },
+        style: {
+          strokeWidth: 2,
+          stroke: "#000",
+        },
+      },
+      edges
+    );
+
+    setEdges(e);
+  };
+
   return (
     <>
       <div className="w-screen h-screen bg-gray-50 relative">
@@ -94,6 +118,7 @@ function App() {
             onNodeClick={handleNodeClick}
             onEdgesChange={handleEdgesChange}
             onNodesChange={handleNodesChange}
+            onConnect={handleOnConnect}
           >
             <Background />
             <Controls />

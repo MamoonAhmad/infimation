@@ -1,4 +1,10 @@
-import { useInternalNode, getBezierPath } from "@xyflow/react";
+import {
+  useInternalNode,
+  getBezierPath,
+  useReactFlow,
+  BaseEdge,
+  EdgeLabelRenderer,
+} from "@xyflow/react";
 import { getEdgeParams } from "./ReactFlowHelpers";
 
 /**
@@ -21,6 +27,11 @@ export function FloatingEdge({ id, source, target, markerEnd, style }) {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
 
+  const { setEdges } = useReactFlow();
+  const onEdgeClick = () => {
+    setEdges((edges) => edges.filter((edge) => edge.id !== id));
+  };
+
   if (!sourceNode || !targetNode) {
     return null;
   }
@@ -30,7 +41,7 @@ export function FloatingEdge({ id, source, target, markerEnd, style }) {
     targetNode
   );
 
-  const [edgePath] = getBezierPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX: sx,
     sourceY: sy,
     sourcePosition: sourcePos,
@@ -40,12 +51,25 @@ export function FloatingEdge({ id, source, target, markerEnd, style }) {
   });
 
   return (
-    <path
-      id={id}
-      className="react-flow__edge-path"
-      d={edgePath}
-      markerEnd={markerEnd}
-      style={style}
-    />
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} />
+      <EdgeLabelRenderer>
+        {targetNode?.data?.workflow_node_type !== "workflow_run_node" ? (
+          <div
+            className="absolute pointer-events-auto"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            }}
+          >
+            <button
+              className="bg-gray-50 border-2 border-black w-6 h-6 flex items-center justify-center p-2 rounded-full hover:bg-gray-300 cursor-pointer hover:border-red-600"
+              onClick={onEdgeClick}
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+      </EdgeLabelRenderer>
+    </>
   );
 }

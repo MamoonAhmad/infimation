@@ -1,11 +1,8 @@
-import {
-  Background,
-  Controls,
-  ReactFlow as ReactFlowOriginal,
-} from "@xyflow/react";
+import { ReactFlow as ReactFlowOriginal } from "@xyflow/react";
 import { FloatingEdge } from "./FloatingEdge";
 import { FloatingConnectionLine } from "./FloatingConnectionLine";
 import "./react-flow.css";
+import { FloatingNode } from "./FloatingNode";
 
 /**
  * @typedef {import('@xyflow/react').ReactFlowProps} ReactFlowProps
@@ -23,6 +20,9 @@ const edgeTypes = {
   floating: FloatingEdge,
 };
 
+const nodeTypes = {
+  floating_node: FloatingNode,
+};
 /**
  * Custom ReactFlow component with floating edges and connection line
  * @param {ReactFlowProps} props - All props from the original ReactFlow component
@@ -32,6 +32,7 @@ export const ReactFlow = ({ children, ...props }) => {
   return (
     <ReactFlowOriginal
       edgeTypes={edgeTypes}
+      nodeTypes={nodeTypes}
       connectionLineComponent={FloatingConnectionLine}
       {...props}
     >

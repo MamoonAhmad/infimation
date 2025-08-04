@@ -25,6 +25,7 @@ const useWorkflowStore = create(
             code: node.code,
             template_id: node.template_id,
             settings: node.settings,
+            type: "floating_node"
           },
         };
 
@@ -67,7 +68,7 @@ const useWorkflowStore = create(
         try {
           const { nodes, edges } = await workflowService.loadWorkflow();
           set({
-            nodes: nodes.map((node) => ({ ...node })),
+            nodes: nodes.map((node) => ({ ...node, type: "floating_node" })),
             edges: edges.map((e) => ({
               ...e,
               type: "floating",
